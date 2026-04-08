@@ -51,7 +51,7 @@ jobs:
       - name: Download and install bootstrap GHC
         run: |
           ARCH=$(uname -m)
-          BOOTSTRAP_URL="https://downloads.haskell.org/~ghc/${BOOTSTRAP_GHC_VERSION}/ghc-${BOOTSTRAP_GHC_VERSION}-${ARCH}-alpine3.12-linux-integer-simple.tar.xz"
+          BOOTSTRAP_URL="https://downloads.haskell.org/~ghc/${BOOTSTRAP_GHC_VERSION}/ghc-${BOOTSTRAP_GHC_VERSION}-${ARCH}-alpine3.12-linux.tar.xz"
           echo "Downloading bootstrap GHC from: ${BOOTSTRAP_URL}"
           curl -fL "${BOOTSTRAP_URL}" -o bootstrap-ghc.tar.xz
           mkdir -p /opt/bootstrap-ghc
