@@ -1,0 +1,102 @@
+name: Build Static GHC
+
+on:
+  workflow_dispatch:
+    inputs:
+      bootstrap_ghc_version:
+        description: 'GHC version used for bootstrapping (e.g. 9.4.8)'
+        required: true
+        type: string
+      ghc_version:
+        description: 'GHC version to build (e.g. 9.6.6)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build static GHC ${{ inputs.ghc_version }}
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:3.20
+    permissions:
+      contents: write
+
+    env:
+      BOOTSTRAP_GHC_VERSION: ${{ inputs.bootstrap_ghc_version }}
+      GHC_VERSION: ${{ inputs.ghc_version }}
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          apk add --no-cache \
+            autoconf \
+            automake \
+            bash \
+            binutils \
+            binutils-gold \
+            curl \
+            gcc \
+            g++ \
+            github-cli \
+            gmp-dev \
+            libffi-dev \
+            make \
+            musl-dev \
+            ncurses-dev \
+            perl \
+            python3 \
+            xz \
+            zlib-dev
+
+      - name: Download and install bootstrap GHC
+        run: |
+          ARCH=$(uname -m)
+          BOOTSTRAP_URL="https://downloads.haskell.org/~ghc/${BOOTSTRAP_GHC_VERSION}/ghc-${BOOTSTRAP_GHC_VERSION}-${ARCH}-alpine3.12-linux-integer-simple.tar.xz"
+          echo "Downloading bootstrap GHC from: ${BOOTSTRAP_URL}"
+          curl -fL "${BOOTSTRAP_URL}" -o bootstrap-ghc.tar.xz
+          mkdir -p /opt/bootstrap-ghc
+          tar -xJf bootstrap-ghc.tar.xz -C /opt/bootstrap-ghc --strip-components=1
+          cd /opt/bootstrap-ghc
+          ./configure --prefix=/opt/ghc-bootstrap
+          make install
+          rm -f bootstrap-ghc.tar.xz
+          echo "/opt/ghc-bootstrap/bin" >> "$GITHUB_PATH"
+
+      - name: Verify bootstrap GHC
+        run: ghc --version
+
+      - name: Download GHC source
+        run: |
+          echo "Downloading GHC ${GHC_VERSION} source"
+          curl -fL "https://downloads.haskell.org/~ghc/${GHC_VERSION}/ghc-${GHC_VERSION}-src.tar.xz" -o ghc-src.tar.xz
+          tar -xJf ghc-src.tar.xz
+          rm -f ghc-src.tar.xz
+
+      - name: Build GHC binary distribution with Hadrian
+        id: dist
+        working-directory: ghc-${{ inputs.ghc_version }}
+        run: |
+          ./hadrian/build -j"$(nproc)" --flavour=static binary-dist
+          DIST_FILE=$(find _build/bindist -maxdepth 1 -name 'ghc-*.tar.xz' | head -n1)
+          if [ -z "${DIST_FILE}" ]; then
+            echo "Error: no distribution tarball found under _build/bindist/" >&2
+            exit 1
+          fi
+          echo "dist_file=${DIST_FILE}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release and upload distribution
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          DIST_FILE="ghc-${{ inputs.ghc_version }}/${{ steps.dist.outputs.dist_file }}"
+          ARCH=$(uname -m)
+          gh release create "ghc-${GHC_VERSION}" \
+            --title "GHC ${GHC_VERSION} (static, ${ARCH})" \
+            --notes "Fully static GHC ${GHC_VERSION} distribution built on Alpine Linux (musl libc).
+
+          **Architecture:** ${ARCH}
+          **Bootstrapped with:** GHC ${BOOTSTRAP_GHC_VERSION}
+
+          Extract and add the \`bin/\` directory to your \`PATH\` to use." \
+            "${DIST_FILE}"
