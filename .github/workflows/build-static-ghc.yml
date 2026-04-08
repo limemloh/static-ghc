@@ -72,6 +72,17 @@ jobs:
           tar -xJf ghc-src.tar.xz
           rm -f ghc-src.tar.xz
 
+      - name: Configure static library and RTS ways
+        working-directory: ghc-${{ inputs.ghc_version }}
+        run: |
+          cat > hadrian.settings <<'EOF'
+          # Build libraries in vanilla (static) way only — no dynamic variants
+          stage1.*.ways = v
+          stage2.*.ways = v
+          # Build the RTS in vanilla and threaded static ways
+          rts.ways = v thr
+          EOF
+
       - name: Build GHC binary distribution with Hadrian
         id: dist
         working-directory: ghc-${{ inputs.ghc_version }}
