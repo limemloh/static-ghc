@@ -60,6 +60,7 @@ jobs:
           ghcup install ghc "${BOOTSTRAP_GHC_VERSION}" --set
           ghcup install cabal --set
           echo "${HOME}/.ghcup/bin" >> "$GITHUB_PATH"
+          "${HOME}/.ghcup/bin/cabal" update
 
       - name: Verify bootstrap GHC
         run: ghc --version
