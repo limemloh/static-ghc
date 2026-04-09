@@ -51,16 +51,14 @@ jobs:
       - name: Download and install bootstrap GHC
         run: |
           ARCH=$(uname -m)
-          BOOTSTRAP_URL="https://downloads.haskell.org/~ghc/${BOOTSTRAP_GHC_VERSION}/ghc-${BOOTSTRAP_GHC_VERSION}-${ARCH}-alpine3.12-linux.tar.xz"
-          echo "Downloading bootstrap GHC from: ${BOOTSTRAP_URL}"
-          curl -fL "${BOOTSTRAP_URL}" -o bootstrap-ghc.tar.xz
-          mkdir -p /opt/bootstrap-ghc
-          tar -xJf bootstrap-ghc.tar.xz -C /opt/bootstrap-ghc --strip-components=1
-          cd /opt/bootstrap-ghc
-          ./configure --prefix=/opt/ghc-bootstrap
-          make install
-          rm -f bootstrap-ghc.tar.xz
-          echo "/opt/ghc-bootstrap/bin" >> "$GITHUB_PATH"
+          GHCUP_URL="https://downloads.haskell.org/~ghcup/${ARCH}-linux-musl-ghcup"
+          echo "Downloading ghcup from: ${GHCUP_URL}"
+          curl -fL "${GHCUP_URL}" -o /usr/local/bin/ghcup
+          chmod +x /usr/local/bin/ghcup
+          ghcup --version
+          echo "Installing GHC ${BOOTSTRAP_GHC_VERSION} via ghcup"
+          ghcup install ghc "${BOOTSTRAP_GHC_VERSION}" --set
+          echo "${HOME}/.ghcup/bin" >> "$GITHUB_PATH"
 
       - name: Verify bootstrap GHC
         run: ghc --version
