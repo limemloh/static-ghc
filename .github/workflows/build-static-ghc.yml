@@ -83,6 +83,10 @@ jobs:
           rts.ways = v thr
           EOF
 
+      - name: Configure GHC build system
+        working-directory: ghc-${{ inputs.ghc_version }}
+        run: ./configure
+
       - name: Build GHC binary distribution with Hadrian
         id: dist
         working-directory: ghc-${{ inputs.ghc_version }}
