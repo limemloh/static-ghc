@@ -72,17 +72,6 @@ jobs:
           tar -xJf ghc-src.tar.xz
           rm -f ghc-src.tar.xz
 
-      - name: Configure static library and RTS ways
-        working-directory: ghc-${{ inputs.ghc_version }}
-        run: |
-          cat > hadrian.settings <<'EOF'
-          # Build libraries in vanilla (static) way only — no dynamic variants
-          stage1.*.ways = v
-          stage2.*.ways = v
-          # Build the RTS in vanilla and threaded static ways
-          rts.ways = v thr
-          EOF
-
       - name: Configure GHC build system
         working-directory: ghc-${{ inputs.ghc_version }}
         run: ./configure
@@ -91,7 +80,17 @@ jobs:
         id: dist
         working-directory: ghc-${{ inputs.ghc_version }}
         run: |
-          ./hadrian/build -j"$(nproc)" --flavour=static binary-dist
+          mkdir -p _build
+          cat <<'EOF' >_build/hadrian.settings
+          # Build libraries in vanilla (static) way only — no dynamic variants
+          stage1.*.ways = v
+          stage2.*.ways = v
+          # Build the RTS in vanilla and threaded static ways
+          rts.ways = v thr
+          stage1.*.ghc.*.opts += -fPIC
+          stage1.*.cc.*.opts += -fPIC
+          EOF
+          ./hadrian/build -j"$(nproc)" --flavour=perf --docs=none binary-dist
           DIST_FILE=$(find _build/bindist -maxdepth 1 -name 'ghc-*.tar.xz' | head -n1)
           if [ -z "${DIST_FILE}" ]; then
             echo "Error: no distribution tarball found under _build/bindist/" >&2
