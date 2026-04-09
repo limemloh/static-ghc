@@ -82,11 +82,6 @@ jobs:
         run: |
           mkdir -p _build
           cat <<'EOF' >_build/hadrian.settings
-          # Build libraries in vanilla (static) way only — no dynamic variants
-          stage1.*.ways = v
-          stage2.*.ways = v
-          # Build the RTS in vanilla and threaded static ways
-          rts.ways = v thr
           stage1.*.ghc.*.opts += -fPIC
           stage1.*.cc.*.opts += -fPIC
           EOF
