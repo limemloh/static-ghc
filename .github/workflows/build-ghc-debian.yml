@@ -1,4 +1,4 @@
-name: Build Static GHC
+name: Build GHC (Debian)
 
 on:
   workflow_dispatch:
@@ -14,10 +14,10 @@ on:
 
 jobs:
   build:
-    name: Build static GHC ${{ inputs.ghc_version }}
+    name: Build GHC ${{ inputs.ghc_version }} (Debian)
     runs-on: ubuntu-latest
     container:
-      image: alpine:3.20
+      image: haskell:${{ inputs.bootstrap_ghc_version }}
     permissions:
       contents: write
       id-token: write
@@ -31,39 +31,33 @@ jobs:
     steps:
       - name: Install build dependencies
         run: |
-          apk add --no-cache \
+          apt-get update -y
+          apt-get install -y --no-install-recommends \
             autoconf \
             automake \
-            bash \
             binutils \
-            binutils-gold \
             curl \
             gcc \
             g++ \
-            github-cli \
-            gmp-dev \
+            libgmp-dev \
             libffi-dev \
             make \
-            musl-dev \
-            ncurses-dev \
+            libncurses-dev \
             perl \
             python3 \
-            xz \
-            zlib-dev
+            xz-utils \
+            zlib1g-dev
+          # Install GitHub CLI
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+            -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+          chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+            > /etc/apt/sources.list.d/github-cli.list
+          apt-get update -y
+          apt-get install -y gh
 
-      - name: Download and install bootstrap GHC
-        run: |
-          ARCH=$(uname -m)
-          GHCUP_URL="https://downloads.haskell.org/~ghcup/${ARCH}-linux-ghcup"
-          echo "Downloading ghcup from: ${GHCUP_URL}"
-          curl -fL "${GHCUP_URL}" -o /usr/local/bin/ghcup
-          chmod +x /usr/local/bin/ghcup
-          ghcup --version
-          echo "Installing GHC ${BOOTSTRAP_GHC_VERSION} via ghcup"
-          ghcup install ghc "${BOOTSTRAP_GHC_VERSION}" --set
-          ghcup install cabal --set
-          echo "${HOME}/.ghcup/bin" >> "$GITHUB_PATH"
-          "${HOME}/.ghcup/bin/cabal" update
+      - name: Update Cabal package list
+        run: cabal update
 
       - name: Verify bootstrap GHC
         run: ghc --version
@@ -94,9 +88,7 @@ jobs:
             echo "Error: no distribution tarball found under _build/bindist/" >&2
             exit 1
           fi
-          MUSL_DIST_FILE="${DIST_FILE%.tar.xz}-musl.tar.xz"
-          mv "${DIST_FILE}" "${MUSL_DIST_FILE}"
-          echo "dist_file=${MUSL_DIST_FILE}" >> "$GITHUB_OUTPUT"
+          echo "dist_file=${DIST_FILE}" >> "$GITHUB_OUTPUT"
 
       - name: Attest build provenance
         uses: actions/attest@v4
@@ -110,13 +102,13 @@ jobs:
         run: |
           DIST_FILE="ghc-${{ inputs.ghc_version }}/${{ steps.dist.outputs.dist_file }}"
           ARCH=$(uname -m)
-          TAG="ghc-${GHC_VERSION}"
+          TAG="ghc-${GHC_VERSION}-debian"
           if gh release view "${TAG}" > /dev/null 2>&1; then
             gh release upload "${TAG}" "${DIST_FILE}"
           else
             gh release create "${TAG}" \
-              --title "GHC ${GHC_VERSION} (static, ${ARCH})" \
-              --notes "Fully static GHC ${GHC_VERSION} distribution built on Alpine Linux (musl libc).
+              --title "GHC ${GHC_VERSION} (Debian, ${ARCH})" \
+              --notes "GHC ${GHC_VERSION} distribution built on Debian (glibc).
 
           **Architecture:** ${ARCH}
           **Bootstrapped with:** GHC ${BOOTSTRAP_GHC_VERSION}
