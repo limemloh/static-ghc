@@ -95,19 +95,24 @@ jobs:
         with:
           subject-path: ghc-${{ inputs.ghc_version }}/${{ steps.dist.outputs.dist_file }}
 
-      - name: Create GitHub release and upload distribution
+      - name: Create or expand GitHub release and upload distribution
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           DIST_FILE="ghc-${{ inputs.ghc_version }}/${{ steps.dist.outputs.dist_file }}"
           ARCH=$(uname -m)
-          gh release create "ghc-${GHC_VERSION}-debian" \
-            --title "GHC ${GHC_VERSION} (Debian, ${ARCH})" \
-            --notes "GHC ${GHC_VERSION} distribution built on Debian (glibc).
+          TAG="ghc-${GHC_VERSION}-debian"
+          if gh release view "${TAG}" > /dev/null 2>&1; then
+            gh release upload "${TAG}" "${DIST_FILE}"
+          else
+            gh release create "${TAG}" \
+              --title "GHC ${GHC_VERSION} (Debian, ${ARCH})" \
+              --notes "GHC ${GHC_VERSION} distribution built on Debian (glibc).
 
           **Architecture:** ${ARCH}
           **Bootstrapped with:** GHC ${BOOTSTRAP_GHC_VERSION}
 
           Extract and add the \`bin/\` directory to your \`PATH\` to use." \
-            "${DIST_FILE}"
+              "${DIST_FILE}"
+          fi
