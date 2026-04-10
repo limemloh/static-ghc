@@ -1,0 +1,113 @@
+name: Build GHC (Debian)
+
+on:
+  workflow_dispatch:
+    inputs:
+      bootstrap_ghc_version:
+        description: 'GHC version used for bootstrapping (e.g. 9.4.8)'
+        required: true
+        type: string
+      ghc_version:
+        description: 'GHC version to build (e.g. 9.6.6)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build GHC ${{ inputs.ghc_version }} (Debian)
+    runs-on: ubuntu-latest
+    container:
+      image: haskell:${{ inputs.bootstrap_ghc_version }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+
+    env:
+      BOOTSTRAP_GHC_VERSION: ${{ inputs.bootstrap_ghc_version }}
+      GHC_VERSION: ${{ inputs.ghc_version }}
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update -y
+          apt-get install -y --no-install-recommends \
+            autoconf \
+            automake \
+            binutils \
+            curl \
+            gcc \
+            g++ \
+            libgmp-dev \
+            libffi-dev \
+            make \
+            libncurses-dev \
+            perl \
+            python3 \
+            xz-utils \
+            zlib1g-dev
+          # Install GitHub CLI
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+            -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+          chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+            > /etc/apt/sources.list.d/github-cli.list
+          apt-get update -y
+          apt-get install -y gh
+
+      - name: Update Cabal package list
+        run: cabal update
+
+      - name: Verify bootstrap GHC
+        run: ghc --version
+
+      - name: Download GHC source
+        run: |
+          echo "Downloading GHC ${GHC_VERSION} source"
+          curl -fL "https://downloads.haskell.org/~ghc/${GHC_VERSION}/ghc-${GHC_VERSION}-src.tar.xz" -o ghc-src.tar.xz
+          tar -xJf ghc-src.tar.xz
+          rm -f ghc-src.tar.xz
+
+      - name: Configure GHC build system
+        working-directory: ghc-${{ inputs.ghc_version }}
+        run: ./configure
+
+      - name: Build GHC binary distribution with Hadrian
+        id: dist
+        working-directory: ghc-${{ inputs.ghc_version }}
+        run: |
+          mkdir -p _build
+          cat <<'EOF' >_build/hadrian.settings
+          stage1.*.ghc.*.opts += -fPIC
+          stage1.*.cc.*.opts += -fPIC
+          EOF
+          ./hadrian/build -j"$(nproc)" --flavour=perf --docs=none binary-dist
+          DIST_FILE=$(find _build/bindist -maxdepth 1 -name 'ghc-*.tar.xz' | head -n1)
+          if [ -z "${DIST_FILE}" ]; then
+            echo "Error: no distribution tarball found under _build/bindist/" >&2
+            exit 1
+          fi
+          echo "dist_file=${DIST_FILE}" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: ghc-${{ inputs.ghc_version }}/${{ steps.dist.outputs.dist_file }}
+
+      - name: Create GitHub release and upload distribution
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          DIST_FILE="ghc-${{ inputs.ghc_version }}/${{ steps.dist.outputs.dist_file }}"
+          ARCH=$(uname -m)
+          gh release create "ghc-${GHC_VERSION}-debian" \
+            --title "GHC ${GHC_VERSION} (Debian, ${ARCH})" \
+            --notes "GHC ${GHC_VERSION} distribution built on Debian (glibc).
+
+          **Architecture:** ${ARCH}
+          **Bootstrapped with:** GHC ${BOOTSTRAP_GHC_VERSION}
+
+          Extract and add the \`bin/\` directory to your \`PATH\` to use." \
+            "${DIST_FILE}"
