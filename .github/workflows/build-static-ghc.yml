@@ -94,7 +94,9 @@ jobs:
             echo "Error: no distribution tarball found under _build/bindist/" >&2
             exit 1
           fi
-          echo "dist_file=${DIST_FILE}" >> "$GITHUB_OUTPUT"
+          MUSL_DIST_FILE="${DIST_FILE%.tar.xz}-musl.tar.xz"
+          mv "${DIST_FILE}" "${MUSL_DIST_FILE}"
+          echo "dist_file=${MUSL_DIST_FILE}" >> "$GITHUB_OUTPUT"
 
       - name: Attest build provenance
         uses: actions/attest@v4
